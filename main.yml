@@ -1,0 +1,45 @@
+---
+- name: Install database server
+  package:
+    name: {{ db_server_package }}
+    state: present
+
+- name: Start and enable database service
+  service:
+    name: {{ db_server_service }}
+    state: started
+    enabled: yes
+
+- name: Create database
+  command: {{ db_server_binary }} -c "CREATE DATABASE {{ db_name }}"
+  become: yes
+  become_user: {{ db_server_user }}
+  when: "'{{ db_name }}' not in {{ db_server_binary }} -c '\l'"
+
+- name: Import database dump
+  command: {{ db_server_binary }} {{ db_name }} < {{ db_dump_file }}
+  become: yes
+  become_user: {{ db_server_user }}
+  when: db_dump_file is defined
+
+- name: Wait for database to be available
+  wait_for:
+    port: {{ db_server_port }}
+    state: started
+  delegate_to: localhost
+
+- name: Configure firewall rules for database
+  template:
+    src: firewall.j2
+    dest: /etc/firewalld/zones/{{ firewall_zone }}.xml
+    mode: 0644
+  become: yes
+  notify: reload firewall
+
+- name: Reload firewall
+  firewalld:
+    state: reloaded
+  become: yes
+  when: firewall_zone is defined
+  delegate_to: localhost
+  tags: reload_firewall
