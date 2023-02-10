@@ -1,0 +1,21 @@
+---
+- name: Backup database
+  command: {{ db_server_binary }} -c "{{ backup_command }}"
+  become: yes
+  become_user: {{ db_server_user }}
+  register: db_backup_result
+
+- name: Store database backup
+  copy:
+    src: "{{ backup_file }}"
+    dest: "{{ backup_destination }}"
+    mode: 0600
+    backup: yes
+  when: db_backup_result.rc == 0
+
+- name: Notify about database backup result
+  mail:
+    subject: "{{ inventory_hostname }}: database backup {{ 'success' if db_backup_result.rc == 0 else 'failed' }}"
+    body: "{{ inventory_hostname }}: database backup {{ 'success' if db_backup_result.rc == 0 else 'failed' }}"
+    to: "{{ backup_recipient }}"
+    when: db_backup_result.rc != 0 or (db_backup_result.rc == 0 and backup_notify_success)
